@@ -315,7 +315,7 @@ class LaserMazeUI(tk.Tk):
         if self.audio_available:
             try:
                 pygame.mixer.music.load("countdown.mp3")
-                pygame.mixer.music.play()
+                
             except Exception as e:
                 print("Could not play countdown.mp3:", e)
 
@@ -332,6 +332,7 @@ class LaserMazeUI(tk.Tk):
         self._last_elapsed = 0.0
         GAME_MODE_ON(self.scanned_addresses)
         self.countdown(3)
+        pygame.mixer.music.play()
 
     def countdown(self, n):
         cmap = {3:'red',2:'orange',1:'green'}
@@ -667,3 +668,4 @@ class LaserMazeUI(tk.Tk):
 if __name__ == "__main__":
     app = LaserMazeUI()
     app.mainloop()
+
