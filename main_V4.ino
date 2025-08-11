@@ -96,6 +96,7 @@ void Set_current(float current) {
 void change_current(int value) {
   EEPROM.write(EEPROM_current, value);
   currentValue = EEPROM.read(EEPROM_current);
+  Set_current(currentValue);
   Serial.print("Save Current: ");
   Serial.println(value);
 }
@@ -108,6 +109,7 @@ void game_mode() {
   Beam_Blocked = 0;
   ASK_BEAM_BLOCKED = false;
   currentValue = EEPROM.read(EEPROM_current);
+  Set_current(currentValue);
   rawPD_VOLT = analogRead(Pin_PD_VOLT);
   raw_threshold_game = rawPD_VOLT;
   set_PD_Threshold(raw_threshold_game);
@@ -117,11 +119,13 @@ void game_mode() {
 
 void TURN_ON() {
   currentValue = EEPROM.read(EEPROM_current);
+  Set_current(currentValue);
   set_PD_Threshold(0);
 }
 
 void TURN_OFF() {
   currentValue = 0;
+  Set_current(currentValue);
 
 
 }
@@ -219,9 +223,7 @@ void setup() {
   pinMode(CS_PIN, OUTPUT);
   pinMode(LDAC_PIN, OUTPUT);
   pinMode(SHDN_PIN, OUTPUT);
-  digitalWrite(CS_PIN, HIGH);
-  digitalWrite(LDAC_PIN, HIGH);
-  digitalWrite(SHDN_PIN, HIGH);
+
 
   analogReference(EXTERNAL);
 
@@ -241,6 +243,12 @@ void setup() {
 
   SPI.begin();
   SPI.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
+  digitalWrite(CS_PIN, HIGH);
+  digitalWrite(LDAC_PIN, HIGH);
+  digitalWrite(SHDN_PIN, HIGH);
+
+  writeDAC(0, 0);
+  writeDAC(1, 0);
 
   Wire.begin(I2C_ADDRESS);
   Wire.onRequest(onRequest);
@@ -249,9 +257,4 @@ void setup() {
 
 
 void loop() {
-  Set_current(currentValue);
-
-
-
-
 }
