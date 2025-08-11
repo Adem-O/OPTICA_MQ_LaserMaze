@@ -96,7 +96,6 @@ void Set_current(float current) {
 void change_current(int value) {
   EEPROM.write(EEPROM_current, value);
   currentValue = EEPROM.read(EEPROM_current);
-  Set_current(currentValue);
   Serial.print("Save Current: ");
   Serial.println(value);
 }
@@ -109,7 +108,6 @@ void game_mode() {
   Beam_Blocked = 0;
   ASK_BEAM_BLOCKED = false;
   currentValue = EEPROM.read(EEPROM_current);
-  Set_current(currentValue);
   rawPD_VOLT = analogRead(Pin_PD_VOLT);
   raw_threshold_game = rawPD_VOLT;
   set_PD_Threshold(raw_threshold_game);
@@ -119,13 +117,12 @@ void game_mode() {
 
 void TURN_ON() {
   currentValue = EEPROM.read(EEPROM_current);
-  Set_current(currentValue);
   set_PD_Threshold(0);
 }
 
 void TURN_OFF() {
   currentValue = 0;
-  Set_current(currentValue);
+
 
 }
 
@@ -252,10 +249,8 @@ void setup() {
 
 
 void loop() {
-  if (initialisation){
-      Set_current(currentValue);
-      initialisation=false;
-  }
+  Set_current(currentValue);
+
 
 
 
