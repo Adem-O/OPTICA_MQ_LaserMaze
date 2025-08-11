@@ -660,6 +660,7 @@ class LaserMazeUI(tk.Tk):
         """Clean up GPIO and close the app."""
         try:
             GPIO.cleanup()
+            TURN_ALL_OFF(self.scanned_addreses)
         except Exception as e:
             print("GPIO.cleanup() failed:", e)
         self.destroy()    # close the Tk window
@@ -668,4 +669,5 @@ class LaserMazeUI(tk.Tk):
 if __name__ == "__main__":
     app = LaserMazeUI()
     app.mainloop()
+
 
