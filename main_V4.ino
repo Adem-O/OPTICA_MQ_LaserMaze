@@ -47,15 +47,11 @@ byte I2C_ADDRESS = 0x00;
 // === Runtime Variables ===
 int raw_threshold_game = 0;
 int Beam_Blocked = 0;
-bool ASK_BEAM_BLOCKED = false;
 int rawPD_VOLT = 0;
 float PD_VOLT = 0;
 int raw_LD_VOLTAGE = 0;
 float LD_VOLTAGE = 0;
 int currentValue = 0;
-float LD_OFF=0;
-int raw_LD_OFF =0;
-bool initialisation=true;
 // === I2C ===
 byte i2cCommand = 0x00;
 uint8_t argument = 0;
@@ -86,44 +82,37 @@ void set_PD_Threshold(int rawPD_VOLT) {
   int dac_rawPD_VOLT = map((rawPD_VOLT * 3) / 4, 0, 1023, 0, 4095);
   writeDAC(1, dac_rawPD_VOLT);
 }
-
 // === Set Laser Current ===
 void Set_current(float current) {
   float bit_current = (current + 0.2372) / 0.0301;
   writeDAC(0, bit_current);
 }
-
 void change_current(int value) {
   EEPROM.write(EEPROM_current, value);
   currentValue = EEPROM.read(EEPROM_current);
-  Set_current(currentValue);
+  TURN_ON();
   Serial.print("Save Current: ");
   Serial.println(value);
 }
-
 void set_laser_color(byte color) {
   EEPROM.write(EEPROM_color, color);
 }
-
 void game_mode() {
   Beam_Blocked = 0;
-  ASK_BEAM_BLOCKED = false;
-  currentValue = EEPROM.read(EEPROM_current);
-  Set_current(currentValue);
+  TURN_ON();
   rawPD_VOLT = analogRead(Pin_PD_VOLT);
   raw_threshold_game = rawPD_VOLT;
   set_PD_Threshold(raw_threshold_game);
 }
-
-
-
 void TURN_ON() {
   currentValue = EEPROM.read(EEPROM_current);
+  digitalWrite(Pin_LD_OFF,LOW);
   Set_current(currentValue);
   set_PD_Threshold(0);
 }
 
 void TURN_OFF() {
+  digitalWrite(Pin_LD_OFF,HIGH);
   currentValue = 0;
   Set_current(currentValue);
 
@@ -152,7 +141,6 @@ void onRequest() {
         TURN_OFF();
         set_PD_Threshold(0);
       }
-
       Serial.println("→ Beam Blocked read & Laser turn on");
       break;
     case CMD_PD_VOLT:
@@ -160,13 +148,6 @@ void onRequest() {
       PD_VOLT = (rawPD_VOLT / 1023.0) * referenceVoltage;
       Serial.println(PD_VOLT);
       Wire.write((byte*)&PD_VOLT, 4);
-      break;
-    case CMD_LD_OFF:
-      raw_LD_OFF = analogRead(Pin_LD_OFF);
-      LD_OFF = (raw_LD_OFF / 1023.0) * referenceVoltage;
-      Wire.write((byte*)&LD_OFF,4);
-      Serial.println("LD_OFF");
-      Serial.print(LD_OFF);
       break;
     default:
       Wire.write(I2C_ADDRESS);
@@ -217,14 +198,16 @@ void receiveCommand(int numBytes) {
 }
 
 void setup() {
+  pinMode(Pin_LD_OFF, OUTPUT);
+  digitalWrite(Pin_LD_OFF,HIGH);
+  
   Serial.begin(9600);
   pinMode(BEAM_BLOCKED_PIN, INPUT);
-
+  
   pinMode(CS_PIN, OUTPUT);
   pinMode(LDAC_PIN, OUTPUT);
   pinMode(SHDN_PIN, OUTPUT);
-
-
+  
   analogReference(EXTERNAL);
 
   for (int i = 0; i < pinCount; i++) {
@@ -240,16 +223,15 @@ void setup() {
   Serial.print("I2C Address set to: 0x");
   Serial.println(I2C_ADDRESS, HEX);
 
-
   SPI.begin();
   SPI.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
   digitalWrite(CS_PIN, HIGH);
   digitalWrite(LDAC_PIN, HIGH);
   digitalWrite(SHDN_PIN, HIGH);
 
-  writeDAC(0, 0);
+  writeDAC(0,0);
   writeDAC(1, 0);
-
+  
   Wire.begin(I2C_ADDRESS);
   Wire.onRequest(onRequest);
   Wire.onReceive(receiveCommand);
