@@ -179,12 +179,72 @@ class LaserMazeUI(tk.Tk):
                   command=self.turn_all_on).grid(row=0, column=1, padx=5, pady=5)
         ctl.pack(pady=10)
 
-        tk.Button(self.setup_frame, text="Check PD Voltage", width=20,
-                  command=self.beam_block_scan).pack(pady=(10,5))
+        # Create container for voltage readings that persists
+        self.voltage_container = tk.Frame(self.setup_frame)
+        self.voltage_container.pack(pady=5, fill='x')
+        
+        # Track if continuous monitoring is active
+        self.monitoring_active = False
+        
+        # Toggle button for PD monitoring
+        self.monitor_button = tk.Button(self.setup_frame, text="View PD Voltage", width=20,
+                                      command=self.toggle_pd_monitoring)
+        self.monitor_button.pack(pady=5)
+        
         tk.Button(self.setup_frame, text="Reset Modules", width=20,
                   command=self.reset_modules).pack(pady=5)
         tk.Button(self.setup_frame, text="Back", width=20,
                   command=self.show_main_menu).pack(pady=(0,10))
+
+    def toggle_pd_monitoring(self):
+        """Toggle continuous PD voltage monitoring"""
+        self.monitoring_active = not self.monitoring_active
+        if self.monitoring_active:
+            self.monitor_button.config(text="Stop PD Monitor", bg='red')
+            self.update_pd_readings()
+        else:
+            self.monitor_button.config(text="Start PD Monitor", bg='SystemButtonFace')
+
+    def update_pd_readings(self):
+        """Update PD voltage readings continuously"""
+        if not self.monitoring_active:
+            return
+            
+        if not self.scanned_addresses:
+            self.monitoring_active = False
+            self.monitor_button.config(text="Start PD Monitor", bg='SystemButtonFace')
+            return
+
+        # Clear existing readings
+        for widget in self.voltage_container.winfo_children():
+            widget.destroy()
+
+        # Add header
+        tk.Label(self.voltage_container, 
+                 text="Live Detector Voltages", 
+                 font=('Arial', 14, 'bold')).pack(pady=(0,10))
+
+        # Update readings for each module
+        for addr in self.scanned_addresses:
+            frame = tk.Frame(self.voltage_container)
+            frame.pack(fill='x', pady=2)
+            
+            voltage = READ_PD_VOLT(addr)
+            bg_color = '#90EE90' if voltage > 1.8 else '#FFB6C6'
+            
+            label = tk.Label(
+                frame,
+                text=f"Module {addr:02X}: {voltage:.2f}V",
+                font=('Arial', 12),
+                bg=bg_color,
+                width=25,
+                pady=5
+            )
+            label.pack(fill='x')
+
+        # Schedule next update in 100ms
+        if self.monitoring_active:
+            self.after(100, self.update_pd_readings)
 
     def scan_modules(self):
         for w in self.module_container.winfo_children():
@@ -300,27 +360,44 @@ class LaserMazeUI(tk.Tk):
     # ---------- Game Mode ----------
     def _build_game_mode(self):
         self.game_frame = tk.Frame(self)
-        tk.Button(self.game_frame, text="Begin Game", width=20,
+        tk.Button(self.game_frame, text="Start Game", width=20,
                   command=self.start_game).pack(pady=(20,5))
         tk.Button(self.game_frame, text="Stop Game",  width=20,
                   command=self.stop_game).pack(pady=5)
-        tk.Button(self.game_frame, text="Beam Block Scan", width=20,
-                  command=self.beam_block_scan).pack(pady=5)
-        tk.Button(self.game_frame, text="Back",        width=20,
+        tk.Button(self.game_frame, text="Back", width=20,
                   command=self.show_main_menu).pack(pady=(20,10))
 
-
     def start_game(self):
-        # Play countdown.mp3 when game starts
-        if self.audio_available:
-            try:
-                pygame.mixer.music.load("countdown.mp3")
-                
-            except Exception as e:
-                print("Could not play countdown.mp3:", e)
+        """Start game with integrated alignment check"""
+        if not self.scanned_addresses:
+            messagebox.showwarning("No Modules", "Please scan for modules first")
+            return
 
+        # Turn on all lasers and check alignment
+        TURN_ALL_ON(self.scanned_addresses)
+        time.sleep(1)  # Give time for lasers to stabilize
+        
+        # Check each module's PD voltage
+        misaligned_modules = []
+        for addr in self.scanned_addresses:
+            voltage = READ_PD_VOLT(addr)
+            if voltage < 1.8:
+                misaligned_modules.append(f"0x{addr:02X}")
+        
+        # If any modules are misaligned, show error and abort
+        if misaligned_modules:
+            TURN_ALL_OFF(self.scanned_addresses)
+            messagebox.showerror(
+                "Cannot Start Game - Alignment Error",
+                f"The following lasers are misaligned:\n{', '.join(misaligned_modules)}\n\n"
+                "Please realign these modules before starting the game."
+            )
+            return
+
+        # All modules aligned - proceed with game start
         if not self.timer_window or not tk.Toplevel.winfo_exists(self.timer_window):
-            self.timer_window = tk.Toplevel(self); self.timer_window.title("Game Timer")
+            self.timer_window = tk.Toplevel(self)
+            self.timer_window.title("Game Timer")
             self.timer_label = tk.Label(
                 self.timer_window, text="",
                 font=('Arial',200,'bold'),
@@ -329,10 +406,19 @@ class LaserMazeUI(tk.Tk):
             )
             self.timer_label.pack(expand=True, fill='both')
             self.timer_window.config(bg='black')
+
+        # Play countdown sound if available
+        if self.audio_available:
+            try:
+                pygame.mixer.music.load("countdown.mp3")
+            except Exception as e:
+                print("Could not play countdown.mp3:", e)
+
         self._last_elapsed = 0.0
         GAME_MODE_ON(self.scanned_addresses)
         self.countdown(3)
-        pygame.mixer.music.play()
+        if self.audio_available:
+            pygame.mixer.music.play()
 
     def countdown(self, n):
         cmap = {3:'red',2:'orange',1:'green'}
