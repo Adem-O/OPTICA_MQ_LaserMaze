@@ -3,6 +3,8 @@ from tkinter import messagebox, simpledialog
 import time
 import sys
 import pygame
+import random  # Import random for test simulations
+import os  # Import os for file path operations
 
 # ------------------- TEST MODE / HARDWARE IMPORTS -------------------
 TEST_MODE = "--test" in sys.argv
@@ -47,10 +49,31 @@ if TEST_MODE:
     def TURN_ONLY_ONE_ON(addr): pass
     def TURN_ONLY_ONE_OFF(addr): pass
     
+    class TestVoltageGenerator:
+        def __init__(self):
+            self.base_voltages = {}
+            self.noise_factor = 0.1
+            
+        def set_base_voltage(self, addr, voltage):
+            self.base_voltages[addr] = voltage
+            
+        def get_voltage(self, addr):
+            base = self.base_voltages.get(addr, 2.0)  # default 2.0V if not set
+            noise = (random.random() - 0.5) * self.noise_factor
+            return max(0, min(3.3, base + noise))  # Keep voltage between 0-3.3V
+
+    # Create global test voltage generator
+    test_voltage_gen = TestVoltageGenerator()
+
+    # Override READ_PD_VOLT to use test generator
     def READ_PD_VOLT(addr):
-        import random
-        return random.uniform(1.5, 2.5)  # Random voltage for testing
-        
+        return test_voltage_gen.get_voltage(addr)
+    
+    # Add test function to simulate voltage changes
+    def simulate_voltage_change(addr, new_voltage):
+        """Test function to change the base voltage for a module"""
+        test_voltage_gen.set_base_voltage(addr, new_voltage)
+    
     def START_TIMER():
         global _game_timer, _game_active, _last_time
         _game_timer = 0
@@ -82,6 +105,19 @@ class LaserMazeUI(tk.Tk):
         super().__init__()
         self.title("Laser Maze Control")
         self.geometry("1024x768")
+        
+        # Set window icon based on platform
+        try:
+            if sys.platform.startswith('win'):
+                # Windows icon (.ico format)
+                self.iconbitmap('icon.ico')
+            else:
+                # Linux/Raspberry Pi icon (.png format)
+                icon = tk.PhotoImage(file='icon.png')
+                self.iconphoto(True, icon)
+        except Exception as e:
+            print(f"Could not load window icon: {e}")
+
         # central address list
         self.scanned_addresses = []
 
@@ -186,24 +222,120 @@ class LaserMazeUI(tk.Tk):
         # Track if continuous monitoring is active
         self.monitoring_active = False
         
-        # Toggle button for PD monitoring
-        self.monitor_button = tk.Button(self.setup_frame, text="View PD Voltage", width=20,
-                                      command=self.toggle_pd_monitoring)
-        self.monitor_button.pack(pady=5)
+        # Create a frame for monitoring controls
+        monitor_controls = tk.Frame(self.setup_frame)
+        monitor_controls.pack(pady=5)
+        
+        # Monitor button
+        self.monitor_button = tk.Button(monitor_controls, text="Start PD Monitor", 
+                                      width=20, command=self.toggle_pd_monitoring)
+        self.monitor_button.pack(side='left', padx=5)
+        
+        # Clear button - initially disabled
+        self.clear_voltages_button = tk.Button(monitor_controls, text="Clear Voltages",
+                                             width=20, command=self.clear_voltage_display,
+                                             state='disabled')
+        self.clear_voltages_button.pack(side='left', padx=5)
         
         tk.Button(self.setup_frame, text="Reset Modules", width=20,
                   command=self.reset_modules).pack(pady=5)
         tk.Button(self.setup_frame, text="Back", width=20,
                   command=self.show_main_menu).pack(pady=(0,10))
 
+        if TEST_MODE:
+            # Add test controls
+            test_frame = tk.Frame(self.setup_frame)
+            test_frame.pack(pady=5)
+            
+            tk.Label(test_frame, text="Test Controls").pack()
+            
+            def simulate_voltage_drop():
+                """Simulate voltage dropping below threshold for random module"""
+                if self.scanned_addresses:
+                    addr = random.choice(self.scanned_addresses)
+                    simulate_voltage_change(addr, 1.5)  # Set voltage below threshold
+                    
+            def simulate_voltage_restore():
+                """Restore all voltages to normal"""
+                for addr in self.scanned_addresses:
+                    simulate_voltage_change(addr, 2.0)
+                    
+            tk.Button(test_frame, 
+                     text="Simulate Voltage Drop", 
+                     command=simulate_voltage_drop).pack(pady=2)
+            
+            tk.Button(test_frame, 
+                     text="Restore Voltages", 
+                     command=simulate_voltage_restore).pack(pady=2)
+
+    def clear_voltage_display(self):
+        """Clear the voltage display area"""
+        # Stop monitoring if active
+        if self.monitoring_active:
+            self.monitoring_active = False
+            self.monitor_button.config(text="Start PD Monitor", bg='#F0F0F0')
+
+        if hasattr(self, 'voltage_labels'):
+            # Clear all labels
+            for label in self.voltage_labels.values():
+                label.destroy()
+            self.voltage_labels.clear()
+            
+            # Clear any header labels
+            for widget in self.voltage_container.winfo_children():
+                widget.destroy()
+                
+            # Remove voltage_labels attribute
+            delattr(self, 'voltage_labels')
+            
+        # Disable clear button until monitoring is started again
+        self.clear_voltages_button.config(state='disabled')
+
     def toggle_pd_monitoring(self):
         """Toggle continuous PD voltage monitoring"""
         self.monitoring_active = not self.monitoring_active
+    
         if self.monitoring_active:
             self.monitor_button.config(text="Stop PD Monitor", bg='red')
+            self.clear_voltages_button.config(state='normal')  # Enable clear button
+            
+            # Create labels only once when starting monitoring
+            if not hasattr(self, 'voltage_labels'):
+                # Clear existing widgets
+                for widget in self.voltage_container.winfo_children():
+                    widget.destroy()
+                    
+                # Create centered container
+                centered_container = tk.Frame(self.voltage_container)
+                centered_container.pack(expand=False)
+                
+                # Add header once
+                tk.Label(centered_container, 
+                        text="Live Detector Voltages", 
+                        font=('Arial', 14, 'bold')).pack(pady=(0,10))
+                
+                # Create dictionary to store labels
+                self.voltage_labels = {}
+                
+                # Create frames and labels for each module
+                for addr in self.scanned_addresses:
+                    frame = tk.Frame(centered_container, width=200)  # Fixed width
+                    frame.pack(pady=2)
+                    
+                    label = tk.Label(
+                        frame,
+                        text="",  # Empty text initially
+                        font=('Arial', 12),
+                        width=20,  # Reduced width
+                        pady=5
+                    )
+                    label.pack()
+                    self.voltage_labels[addr] = label
+        
             self.update_pd_readings()
         else:
-            self.monitor_button.config(text="Start PD Monitor", bg='SystemButtonFace')
+            self.monitor_button.config(text="Start PD Monitor", bg='#F0F0F0')
+            # Keep clear button enabled after stopping monitoring
 
     def update_pd_readings(self):
         """Update PD voltage readings continuously"""
@@ -212,37 +344,21 @@ class LaserMazeUI(tk.Tk):
             
         if not self.scanned_addresses:
             self.monitoring_active = False
-            self.monitor_button.config(text="Start PD Monitor", bg='SystemButtonFace')
+            self.monitor_button.config(text="Start PD Monitor", bg='#F0F0F0')
             return
 
-        # Clear existing readings
-        for widget in self.voltage_container.winfo_children():
-            widget.destroy()
-
-        # Add header
-        tk.Label(self.voltage_container, 
-                 text="Live Detector Voltages", 
-                 font=('Arial', 14, 'bold')).pack(pady=(0,10))
-
-        # Update readings for each module
+        # Update only the text and colors of existing labels
         for addr in self.scanned_addresses:
-            frame = tk.Frame(self.voltage_container)
-            frame.pack(fill='x', pady=2)
-            
             voltage = READ_PD_VOLT(addr)
             bg_color = '#90EE90' if voltage > 1.8 else '#FFB6C6'
             
-            label = tk.Label(
-                frame,
+            label = self.voltage_labels[addr]
+            label.config(
                 text=f"Module {addr:02X}: {voltage:.2f}V",
-                font=('Arial', 12),
-                bg=bg_color,
-                width=25,
-                pady=5
+                bg=bg_color
             )
-            label.pack(fill='x')
 
-        # Schedule next update in 100ms
+        # Schedule next update
         if self.monitoring_active:
             self.after(100, self.update_pd_readings)
 
@@ -746,7 +862,7 @@ class LaserMazeUI(tk.Tk):
         """Clean up GPIO and close the app."""
         try:
             GPIO.cleanup()
-            TURN_ALL_OFF(self.scanned_addreses)
+            TURN_ALL_OFF(self.scanned_addresses)
         except Exception as e:
             print("GPIO.cleanup() failed:", e)
         self.destroy()    # close the Tk window
