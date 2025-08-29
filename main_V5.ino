@@ -42,7 +42,7 @@ const int EEPROM_color   = 1;
 const int digitalPinCount = 5;  // Digital pins 3-7
 const int analogPinCount = 2;   // A6 and A7
 const int digitalPins[digitalPinCount] = {3, 4, 5, 6, 7};
-const int analogPins[analogPinCount] = {A6, A7};
+const int analogPins[analogPinCount] = {A7, A6};
 int Adresse[digitalPinCount + analogPinCount];
 byte I2C_ADDRESS = 0x00;
 
@@ -223,7 +223,7 @@ void setup() {
   for (int i = 0; i < analogPinCount; i++) {
       // Read analog value and convert to digital (threshold at half of max reading)
       int analogValue = analogRead(analogPins[i]);
-      Adresse[digitalPinCount + i] = (analogValue > 512) ? HIGH : LOW;
+      Adresse[digitalPinCount + i] = (analogValue > 58) ? HIGH : LOW;
   }
 
   // Calculate I2C address
