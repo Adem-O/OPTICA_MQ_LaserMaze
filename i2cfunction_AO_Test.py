@@ -54,7 +54,7 @@ def read_response(address, command):
 def SCAN_I2C_BUS():
     print("Scanning I2C bus for devices...")
     found_devices = []
-    for address in range(0x03, 0x78):
+    for address in range(0x01, 0x78):
         try:
             received = bus.read_byte(address)
             found_devices.append(address)
