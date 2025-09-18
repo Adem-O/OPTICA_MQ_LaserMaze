@@ -28,8 +28,7 @@ CMD_PD_VOLT = 0xFF          # Read photodiode voltage
 def set_bus(b):
     global bus
     bus = b
-
-
+    
 # Send a command to an Arduino, with optional value
 def send_command(address, command, value=None):
     if value is not None:
@@ -56,30 +55,72 @@ def SCAN_I2C_BUS():
     found_devices = []
     for address in range(0x01, 0x78):
         try:
-            received = bus.read_byte(address)
+            # Use a simple probe; some devices may NACK - swallow exceptions
+            bus.read_byte(address)
             found_devices.append(address)
         except Exception:
             pass
+    found_devices = list(dict.fromkeys(found_devices))  # ensure unique/order
     if not found_devices:
         print("No I2C devices found")
     else:
-        print(f"Total devices found: {len(found_devices)} ")
+        print(f"Total devices found: {len(found_devices)} -> {found_devices}")
     return found_devices
 
-# Turn off all lasers
+# Turn off all lasers with improved reliability
 def TURN_ALL_OFF(ADDRESSES):
     for address in ADDRESSES:
         send_command(address, CMD_TURN_OFF)
+        time.sleep(0.01)  # Small delay between commands to prevent bus overload
         
+    # Try to verify all modules are actually off
+    verify_attempts = 0
+    while verify_attempts < 3:
+        all_off = True
+        for address in ADDRESSES:
+            try:
+                time.sleep(0.01)
+                # Simple read to check if device is responsive
+                bus.read_byte(address)
+            except Exception as e:
+                print(f"Warning: Module 0x{address:02X} may not have received OFF command: {e}")
+                all_off = False
+                # Try again for this specific module
+                try:
+                    time.sleep(0.02)
+                    send_command(address, CMD_TURN_OFF)
+                except:
+                    pass
+        
+        if all_off:
+            break
+        verify_attempts += 1
 
 # Turn off a single laser
 def TURN_ONLY_ONE_OFF(ADDRESS):
-    send_command(ADDRESS, CMD_TURN_OFF)
+    # Try up to 3 times
+    for attempt in range(3):
+        try:
+            send_command(ADDRESS, CMD_TURN_OFF)
+            return  # Success
+        except OSError as e:
+            if e.errno == 5:  # I/O error
+                print(f"I/O error turning off module 0x{ADDRESS:02X}, retrying...")
+                time.sleep(0.02 * (attempt + 1))  # Progressively longer delays
+            else:
+                print(f"Error {e.errno} turning off module 0x{ADDRESS:02X}")
+                break
+        except Exception as e:
+            print(f"Error turning off module 0x{ADDRESS:02X}: {e}")
+            break
 
-# Turn on all lasers
+# Turn on all lasers with improved reliability
 def TURN_ALL_ON(ADDRESSES):
     for address in ADDRESSES:
         send_command(address, CMD_TURN_ON)
+        time.sleep(0.01)  # Small delay between commands to prevent bus overload
+    
+    # Give lasers time to stabilize
     time.sleep(2)
 
 
@@ -131,14 +172,17 @@ def READ_LASER_CURRENT(ADDRESS):
 
 # Read and decode laser color from one Arduino
 def READ_LASER_COLOR(ADDRESS):
+    """Read and decode laser color from one Arduino. Return 'blue'|'green'|'red' or None."""
     Value = read_response(ADDRESS, CMD_READ_COLOR)
+    color = None
     if Value == 0x01:
         color = "blue"
     elif Value == 0x02:
         color = "green"
     elif Value == 0x04:
         color = "red"
-    print(f"Color : {color}")
+    # Always safe to print even if unknown
+    print(f"Color for 0x{ADDRESS:02X}: {color}")
     return color
 
 # Game mode execution for all devices
@@ -166,39 +210,52 @@ def MONITOR_BLOCKED_BEAM(ADDRESSES):
 # Query each Arduino to check if their beam is blocked
 # Adds penalty time if beam is broken
 def ASK_ARDUINO_BLOCKED_BEAM(ADDRESSES):
+    """Query each Arduino to check if their beam is blocked; add penalty when found."""
     for address in ADDRESSES:
-        if read_response(address, CMD_BEAM_BLOCKED):
-            ADD_TIME_COUNTER(address)
-
+        try:
+            if read_response(address, CMD_BEAM_BLOCKED):
+                ADD_TIME_COUNTER(address)
+        except Exception as e:
+            print(f"Error querying beam block for 0x{address:02X}: {e}")
 
 # Increase penalty counter based on laser color
 # blue = +20s, green = +5s, red = +10s
 def ADD_TIME_COUNTER(ADDRESS):
-    global penatly
+    """Increase penalty counter based on laser color."""
+    global penalty
     color = READ_LASER_COLOR(ADDRESS)
     if color == "blue":
-        penatly += 20
+        penalty += 20
     elif color == "green":
-        penatly += 5
+        penalty += 5
     elif color == "red":
-        penatly += 10
+        penalty += 10
+    # If color is None, do nothing
 
 # Starts countdown and initializes timer
 def START_TIMER():
-    global start
-    global penatly
-    penatly = 0
+    global start, penalty
+    penalty = 0
     start = time.time()
 
 # Read and print total elapsed game time with penalties
 def READ_TIMER():
-    
-    counter = (time.time() - start) + penatly
-    #print(f"\nTimer :{counter} s       ",end="\r")
-    print("Timer:{:.1f} s".format(counter),end="\r")
+    """Return elapsed time plus penalties."""
+    global start, penalty
+    if start == 0:
+        return 0.0
+    counter = (time.time() - start) + penalty
+    # optional: print status quietly
+    # print("Timer:{:.1f} s".format(counter), end="\r")
     return counter
 
 def STOP_GAME_MODE():
-    addrs = SCAN_I2C_BUS()
-    TURN_ALL_OFF(addrs)
+    try:
+        addrs = SCAN_I2C_BUS()
+        TURN_ALL_OFF(addrs)
+    except Exception as e:
+        print(f"Error stopping game mode: {e}")
     print("GAME MODE STOPPED – all lasers off")
+    for address in addrs:
+        if read_response(address, CMD_BEAM_BLOCKED):
+            ADD_TIME_COUNTER(address)
