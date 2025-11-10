@@ -10,8 +10,7 @@ The schematic for the detector and arduino modules are found in  `LaserMazeDetec
 The encolsure schematics for the detectors is found in `LaserMaze_Detector_Enclosure.pdf`
 
 
-
-<h5>Credit</h5>
+##Credit
 **Schematics Desgined by:** Dr Russell Connally, Logic Systems Design <br>
 **Enclosures and Design/Concept:** Dr Simon Gross, Associate Professor Faculty of Science and Engineering, Macquarie University
 **Software Contributors:** Alan Tricoche ( Université Paris-Saclay), Elizabeth Arcadi (Macquarie University), James Bainbridge (Macquarie University), Adem Ozer (Macquarie University)
