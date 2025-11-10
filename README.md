@@ -13,5 +13,5 @@ The encolsure schematics for the detectors is found in `LaserMaze_Detector_Enclo
 ## Credit <br>
 **Enclosures and Design/Concept:** Dr Simon Gross, Associate Professor Faculty of Science and Engineering, Macquarie University<br> <br>
 **Software Contributors:** Alan Tricoche ( Université Paris-Saclay), Elizabeth Arcadi (Macquarie University), James Bainbridge (Macquarie University), Adem Ozer (Macquarie University)<br> <br>
-**Schematics Desgined by:** Dr Russell Connally, Logic Systems Design <br> <br>
+**Schematics Designed by:** Dr Russell Connally, Logic Systems Design <br> <br>
 
