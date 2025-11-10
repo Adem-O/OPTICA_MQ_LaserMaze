@@ -1,4 +1,4 @@
-Repo for the OPTICAMQ Laser Maze Project:
+# Repo for the OPTICAMQ Laser Maze Project:
 
 The UI is run on the controller's Raspberry Pi using `LaserMazeController.py`. 
 The schematic for the controller and Pi is found in `LaserMazeControllerSchematic.pdf`.
