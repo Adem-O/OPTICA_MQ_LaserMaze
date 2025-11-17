@@ -1,4 +1,4 @@
-# Repo for the OPTICAMQ Laser Maze Project:
+# OPTICA MQ Student Chapter - Laser Maze Project:
 This repo contains the code and auxillary files for the MQ OPTICA Student Chapter laser maze.
 
 Documentation on the setup and running of the laser maze can be found here: [PENDING]
